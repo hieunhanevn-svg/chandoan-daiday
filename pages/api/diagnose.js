@@ -1,126 +1,213 @@
-const SYSTEM_PROMPT = `Bạn là chuyên gia chẩn đoán lỗi đấu dây điện kế 3 pha gián tiếp. Sử dụng thuật toán Naive Bayes v6.5.
+// ================================================================
+// TÍNH TOÁN HOÀN TOÀN BẰNG JAVASCRIPT — không nhờ Claude tính số
+// Claude chỉ viết kết luận bằng tiếng Việt
+// ================================================================
 
-THUẬT TOÁN TÍNH TOÁN:
-1. Chuẩn hóa phi về [-180,+180]: nếu Gốc 360 và phi>180 thì eff_phi = phi-360, ngược lại eff_phi = phi
-2. Pa=Ua*Ia*cos(effA_rad), Pb=Ub*Ib*cos(effB_rad), Pc=Uc*Ic*cos(effC_rad)
-3. Pcalc = |Pa|+|Pb|+|Pc| (TỔNG TRỊ TUYỆT ĐỐI — không phụ thuộc chiều đấu dây)
-4. P_ratio = P_tong_do / Pcalc
-5. Phát hiện flip:
-   - Nếu CÓ Pa_do/Pb_do/Pc_do: ratioX = Px_do/|Px_tinh|, flipX = (ratioX < -0.5)
-   - Nếu KHÔNG: flipX = (|eff_phi_X| > 90)  ← QUAN TRỌNG: phi âm bình thường (bù dư) chỉ có |phi|<90, CT đảo mới có |phi|>90
-6. numFlipped = tổng số flip=True
-7. missX = (Ix<0.01 OR Ux<0.01), numMissing = tổng
-8. phiDiff giữa các pha: nếu có cặp nào ≈120° → has120offset=True (đặc trưng TH5)
+function diagnoseAlgorithm(body) {
+  const { Ua, Ub, Uc, Ia, Ib, Ic, phiA, phiB, phiC, phiMode, Ptotal, Pa_do, Pb_do, Pc_do } = body;
+  const PI = Math.PI;
 
-CHẤM ĐIỂM NAIVE BAYES (ngưỡng P_ratio: khớp±20%=1.0, gần±40%=0.5, xa=0.02):
-- Binh_thuong: ratio≈+1.0, flip=0, miss=0, 120=F → nếu có Pabc: cả 3 ratioX≈+1 (±0.25)
-- TH1: ratio≈+0.67, flip=0, miss=1, 120=F → nếu có Pabc: đúng 1 pha ratioX≈0 (<0.25)
-- TH2: ratio≈+0.33, flip=1, miss=0, 120=F → nếu có Pabc: đúng 1 pha ratioX<-0.5
-- TH3: ratio≈-0.33, flip=2, miss=0, 120=F → nếu có Pabc: đúng 2 pha ratioX<-0.5
-- TH4: ratio≈-1.0, flip=3, miss=0, 120=F → nếu có Pabc: cả 3 pha ratioX<-0.5
-- TH5: ratio≈0, flip=bất kỳ, miss=0, 120=T (has120offset là dấu hiệu chính)
-- TH6: ratio≈+0.67, flip>=1, miss=0, 120=F → nếu có Pabc: đúng 2 pha ratioX<-0.5
+  // Chuẩn hóa phi về [-180, +180]
+  function eff(phi) {
+    let p = parseFloat(phi) || 0;
+    if (phiMode === '360' && p > 180) p -= 360;
+    return p;
+  }
+  const eA = eff(phiA), eB = eff(phiB), eC = eff(phiC);
 
-score(TH) = P_ratio_score × P_flip_score × P_miss_score × P_120_score [× P_pha_score nếu có Pabc]
-% = score(TH)/tổng_score × 100, xếp hạng giảm dần, lấy top 3.
+  // Parse
+  const ua = parseFloat(Ua)||0, ub = parseFloat(Ub)||0, uc = parseFloat(Uc)||0;
+  const ia = parseFloat(Ia)||0, ib = parseFloat(Ib)||0, ic = parseFloat(Ic)||0;
+  const pdo = parseFloat(Ptotal)||0;
+  const pa_do = Pa_do !== '' && Pa_do !== null && Pa_do !== undefined ? parseFloat(Pa_do) : null;
+  const pb_do = Pb_do !== '' && Pb_do !== null && Pb_do !== undefined ? parseFloat(Pb_do) : null;
+  const pc_do = Pc_do !== '' && Pc_do !== null && Pc_do !== undefined ? parseFloat(Pc_do) : null;
+  const hasPabc = pa_do !== null || pb_do !== null || pc_do !== null;
 
-PHÂN BIỆT QUAN TRỌNG:
-- TH1 vs TH6: đều ratio≈0.67. TH1: có I=0 hoặc U=0. TH6: không có I=0, phi bất thường, nếu có Pabc: 2 pha ratio âm.
-- TH2 vs TH3: TH2 flip=1 (1 CT đảo), TH3 flip=2 (2 CT đảo)
-- TH5 duy nhất: ratio≈0 VÀ has120offset=True
+  // Tính P từng pha
+  const Pa = ua * ia * Math.cos(eA * PI / 180);
+  const Pb = ub * ib * Math.cos(eB * PI / 180);
+  const Pc = uc * ic * Math.cos(eC * PI / 180);
+  const Pcalc = Math.abs(Pa) + Math.abs(Pb) + Math.abs(Pc);
+  const ratio = Pcalc < 0.001 ? (Math.abs(pdo) < 0.001 ? 0 : 9.99) : pdo / Pcalc;
 
-TÊN VÀ HÀNH ĐỘNG:
-- Binh_thuong → "Đấu dây đúng cực tính" → "Không cần xử lý. Hệ thống hoạt động bình thường."
-- TH1 → "TH1: Mất áp hoặc dòng 1 pha" → "Kiểm tra cầu chì nhi thứ, đứt dây CT/VT pha có I=0 hoặc U=0."
-- TH2 → "TH2: Đảo cực tính dòng 1 pha" → "Đổi đầu S1↔S2 của CT pha có |φ|>90° (hoặc ratioX âm)."
-- TH3 → "TH3: Đảo cực tính dòng 2 pha" → "Đổi đầu S1↔S2 của 2 CT tương ứng 2 pha có |φ|>90°."
-- TH4 → "TH4: Đảo cực tính cả 3 dòng" → "Đổi đầu S1↔S2 cả 3 CT hoặc kiểm tra toàn bộ chiều đấu dây."
-- TH5 → "TH5: Đấu sai dòng và áp 2 pha" → "Hoán đổi lại cáp nhi thứ CT và VT giữa 2 pha bị đổi chéo."
-- TH6 → "TH6: Đảo 2 cuộn áp VT + 2 dòng CT" → "Đặt lại 2 cuộn áp VT đúng pha + đổi S1↔S2 của 2 CT tương ứng."
+  // ratioX từng pha (nếu có Pa/Pb/Pc)
+  const rA = hasPabc && Math.abs(Pa) > 0.001 ? (pa_do || 0) / Math.abs(Pa) : null;
+  const rB = hasPabc && Math.abs(Pb) > 0.001 ? (pb_do || 0) / Math.abs(Pb) : null;
+  const rC = hasPabc && Math.abs(Pc) > 0.001 ? (pc_do || 0) / Math.abs(Pc) : null;
 
-TRẢ VỀ JSON HỢP LỆ DUY NHẤT, không markdown, không giải thích ngoài JSON:
-{
-  "metrics": {
-    "Pcalc": "<số 2 chữ số thập phân>W",
-    "P_ratio": "<số 4 chữ số thập phân>",
-    "numFlipped": <số nguyên>,
-    "hasPabc": <true|false>,
-    "ratioA": "<nếu có Pabc, số 3 chữ số thập phân, ngược lại null>",
-    "ratioB": "<nếu có Pabc>",
-    "ratioC": "<nếu có Pabc>"
-  },
-  "results": [
-    {"rank": 1, "name": "<tên>", "desc": "<mô tả công suất ngắn gọn>", "action": "<hành động kiểm tra>"},
-    {"rank": 2, "name": "<tên>", "desc": "<mô tả>", "action": "<hành động>"},
-    {"rank": 3, "name": "<tên>", "desc": "<mô tả>", "action": "<hành động>"}
-  ],
-  "conclusion": "<1 câu kết luận: trường hợp nào, pha nào bị lỗi, hành động ưu tiên>"
-}`;
+  // Phát hiện flip
+  const flipA = hasPabc ? (rA !== null ? rA < -0.5 : false) : Math.abs(eA) > 90;
+  const flipB = hasPabc ? (rB !== null ? rB < -0.5 : false) : Math.abs(eB) > 90;
+  const flipC = hasPabc ? (rC !== null ? rC < -0.5 : false) : Math.abs(eC) > 90;
+  const numFlipped = [flipA, flipB, flipC].filter(Boolean).length;
+
+  // Missing
+  const missA = ia < 0.01 || ua < 0.01;
+  const missB = ib < 0.01 || ub < 0.01;
+  const missC = ic < 0.01 || uc < 0.01;
+  const numMissing = [missA, missB, missC].filter(Boolean).length;
+
+  // has120offset
+  function angDiff(a, b) { let d = Math.abs(a - b); return d > 180 ? 360 - d : d; }
+  const dAB = angDiff(eA, eB), dBC = angDiff(eB, eC), dAC = angDiff(eA, eC);
+  const has120 = Math.abs(dAB - 120) < 25 || Math.abs(dBC - 120) < 25 || Math.abs(dAC - 120) < 25;
+
+  // numNeg: số pha có ratioX < -0.5
+  const numNeg = hasPabc ? [rA, rB, rC].filter(r => r !== null && r < -0.5).length : 0;
+
+  // ── NAIVE BAYES SCORING ──────────────────────────────────────
+  function sratio(r, exp, t1 = 0.20, t2 = 0.40) {
+    const d = Math.abs(r - exp);
+    if (d <= t1) return 1.0;
+    if (d <= t2) return 0.5;
+    return 0.02;
+  }
+  function sflip(nf, exp) {
+    if (nf === exp) return 1.0;
+    if (Math.abs(nf - exp) === 1) return 0.1;
+    return 0.02;
+  }
+  function smiss(nm, exp) {
+    if (nm === exp) return 1.0;
+    if (Math.abs(nm - exp) <= 1) return 0.1;
+    return 0.02;
+  }
+  function s120(has, exp) { return has === exp ? 1.0 : 0.02; }
+  function spabc(nn, exp) { return hasPabc ? (nn === exp ? 1.0 : 0.02) : 1.0; }
+
+  const cases = [
+    {
+      id: 0, key: 'Binh_thuong',
+      name: 'Đấu dây đúng cực tính',
+      desc: 'P_đo = P_tính toán. Hệ thống vận hành đúng.',
+      action: 'Không cần xử lý. Hệ thống hoạt động bình thường.',
+      score: sratio(ratio,1.0) * sflip(numFlipped,0) * smiss(numMissing,0) * s120(has120,false) * spabc(numNeg,0)
+    },
+    {
+      id: 1, key: 'TH1',
+      name: 'TH1: Mất điện áp hoặc dòng 1 pha',
+      desc: 'P = 2/3 × P₃pha. 1 pha mất tín hiệu CT hoặc VT.',
+      action: 'Kiểm tra cầu chì nhi thứ, đứt dây CT/VT pha có I=0 hoặc U=0.',
+      score: sratio(ratio,0.667) * sflip(numFlipped,0) * smiss(numMissing,1) * s120(has120,false) * spabc(numNeg,0)
+    },
+    {
+      id: 2, key: 'TH2',
+      name: 'TH2: Đảo cực tính dòng 1 pha',
+      desc: 'P = 1/3 × P₃pha. 1 CT đấu ngược.',
+      action: 'Đổi đầu S1↔S2 của CT pha có |φ|>90° (hoặc ratioX âm).',
+      score: sratio(ratio,0.333) * sflip(numFlipped,1) * smiss(numMissing,0) * s120(has120,false) * spabc(numNeg,1)
+    },
+    {
+      id: 3, key: 'TH3',
+      name: 'TH3: Đảo cực tính dòng 2 pha',
+      desc: 'P = −1/3 × P₃pha. 2 CT đấu ngược.',
+      action: 'Đổi đầu S1↔S2 của 2 CT tương ứng 2 pha có |φ|>90°.',
+      score: sratio(ratio,-0.333) * sflip(numFlipped,2) * smiss(numMissing,0) * s120(has120,false) * spabc(numNeg,2)
+    },
+    {
+      id: 4, key: 'TH4',
+      name: 'TH4: Đảo cực tính cả 3 dòng',
+      desc: 'P = −P₃pha. Toàn bộ CT ngược. Đồng hồ quay ngược.',
+      action: 'Đổi đầu S1↔S2 cả 3 CT hoặc kiểm tra toàn bộ chiều đấu dây.',
+      score: sratio(ratio,-1.0) * sflip(numFlipped,3) * smiss(numMissing,0) * s120(has120,false) * spabc(numNeg,3)
+    },
+    {
+      id: 5, key: 'TH5',
+      name: 'TH5: Đấu sai dòng và áp 2 pha',
+      desc: 'P ≈ 0. Cáp nhi thứ CT & VT đổi chéo 2 pha.',
+      action: 'Hoán đổi lại cáp nhi thứ CT và VT giữa 2 pha bị đổi chéo.',
+      score: sratio(ratio,0.0) * 1.0 * smiss(numMissing,0) * s120(has120,true)
+      // TH5: flip bất kỳ (pf=1.0), has120=True là đặc trưng chính
+    },
+    {
+      id: 6, key: 'TH6',
+      name: 'TH6: Đảo 2 cuộn áp VT + 2 dòng CT',
+      desc: 'P = 2/3 × P₃pha. 2 VT đổi pha + 2 CT bị đảo.',
+      action: 'Đặt lại 2 cuộn áp VT đúng pha + đổi S1↔S2 của 2 CT tương ứng.',
+      score: sratio(ratio,0.667) * (numFlipped >= 1 ? 1.0 : 0.1) * smiss(numMissing,0) * s120(has120,false) * spabc(numNeg,2)
+    },
+  ];
+
+  // Chuẩn hóa %
+  const total = cases.reduce((s, c) => s + c.score, 0) || 0.0001;
+  cases.forEach(c => c.pct = c.score / total * 100);
+
+  // Xếp hạng
+  const sorted = [...cases].sort((a, b) => b.score - a.score);
+
+  return {
+    metrics: {
+      Pcalc: Pcalc.toFixed(2) + 'W',
+      P_ratio: ratio.toFixed(4),
+      numFlipped,
+      numMissing,
+      has120,
+      hasPabc,
+      ratioA: rA !== null ? rA.toFixed(3) : null,
+      ratioB: rB !== null ? rB.toFixed(3) : null,
+      ratioC: rC !== null ? rC.toFixed(3) : null,
+    },
+    sorted,
+    top3: sorted.slice(0, 3),
+  };
+}
+
+// System prompt CHỈ viết kết luận — không tính toán
+const CONCLUSION_PROMPT = `Bạn là chuyên gia điện. Dựa vào kết quả chẩn đoán đã tính toán sẵn, hãy viết 1 câu kết luận ngắn gọn bằng tiếng Việt (tối đa 25 chữ) theo mẫu: "[Tên TH]: [pha nào bị lỗi nếu biết]. [Hành động ưu tiên ngắn gọn]."
+Trả về CHỈ câu kết luận, không thêm gì khác.`;
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'API key chưa được cấu hình trên server' });
-  }
-
-  const { Ua, Ub, Uc, Ia, Ib, Ic, phiA, phiB, phiC, phiMode, Ptotal, Pa_do, Pb_do, Pc_do } = req.body;
-
-  if (!Ua || !Ub || !Uc || !Ia || !Ib || !Ic || phiA === undefined || phiB === undefined || phiC === undefined || !Ptotal) {
-    return res.status(400).json({ error: 'Thiếu thông số bắt buộc' });
-  }
-
-  const hasPabc = (Pa_do !== '' && Pa_do !== null && Pa_do !== undefined) ||
-                  (Pb_do !== '' && Pb_do !== null && Pb_do !== undefined) ||
-                  (Pc_do !== '' && Pc_do !== null && Pc_do !== undefined);
-
-  const userMsg = `Phân tích điện kế 3 pha gián tiếp:
-
-THÔNG SỐ ĐO LƯỜNG:
-- Ua=${Ua}V, Ub=${Ub}V, Uc=${Uc}V
-- Ia=${Ia}A, Ib=${Ib}A, Ic=${Ic}A
-- phiA=${phiA}°, phiB=${phiB}°, phiC=${phiC}° (Quy ước: Gốc ${phiMode}°)
-
-CÔNG SUẤT ĐO TRÊN CÔNG TƠ:
-- P tổng = ${Ptotal}W
-${hasPabc ? `- Pa_đo = ${Pa_do || 0}W, Pb_đo = ${Pb_do || 0}W, Pc_đo = ${Pc_do || 0}W` : '- Pa/Pb/Pc từng pha: không nhập (chỉ dùng P tổng)'}
-
-Hãy tính toán đầy đủ theo thuật toán và trả về JSON kết quả.`;
+  if (!apiKey) return res.status(500).json({ error: 'API key chưa được cấu hình trên server' });
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    // 1. Tính toán bằng JS — chắc chắn 100%
+    const { metrics, top3 } = diagnoseAlgorithm(req.body);
+
+    // 2. Nhờ Claude viết kết luận (không tính toán)
+    const userMsg = `Kết quả chẩn đoán:
+- Hạng 1: ${top3[0].name} (${top3[0].pct.toFixed(1)}%)
+- Hạng 2: ${top3[1].name} (${top3[1].pct.toFixed(1)}%)
+- Tỷ lệ P_đo/P_tính: ${metrics.P_ratio}
+- Số pha bị đảo: ${metrics.numFlipped}
+- has120offset: ${metrics.has120}
+${metrics.hasPabc ? `- ratioA=${metrics.ratioA}, ratioB=${metrics.ratioB}, ratioC=${metrics.ratioC}` : ''}
+Viết kết luận 1 câu ngắn.`;
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 1024,
-        system: SYSTEM_PROMPT,
+        max_tokens: 120,
+        system: CONCLUSION_PROMPT,
         messages: [{ role: 'user', content: userMsg }],
       }),
     });
 
-    if (!response.ok) {
-      const err = await response.json();
-      return res.status(response.status).json({ error: err.error?.message || 'Lỗi API Anthropic' });
+    let conclusion = top3[0].name + '. ' + top3[0].action;
+    if (resp.ok) {
+      const data = await resp.json();
+      conclusion = data.content[0].text.trim();
     }
 
-    const data = await response.json();
-    const text = data.content[0].text;
-    // Trích xuất JSON từ response — dùng regex tìm block { ... } đầu tiên
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('Không tìm thấy JSON trong response');
-    const result = JSON.parse(match[0]);
-    return res.status(200).json(result);
+    return res.status(200).json({
+      metrics,
+      results: top3.map((c, i) => ({
+        rank: i + 1,
+        name: c.name,
+        desc: c.desc,
+        action: c.action,
+        pct: c.pct.toFixed(1),
+      })),
+      conclusion,
+    });
 
   } catch (err) {
-    console.error('Diagnose error:', err);
+    console.error(err);
     return res.status(500).json({ error: 'Lỗi xử lý: ' + err.message });
   }
 }
