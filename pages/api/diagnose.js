@@ -99,7 +99,7 @@ Hãy tính toán đầy đủ theo thuật toán và trả về JSON kết quả
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-sonnet-4-20250514',
         max_tokens: 1024,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userMsg }],
@@ -112,8 +112,11 @@ Hãy tính toán đầy đủ theo thuật toán và trả về JSON kết quả
     }
 
     const data = await response.json();
-    const raw = data.content[0].text.replace(/```json|```/g, '').trim();
-    const result = JSON.parse(raw);
+    const text = data.content[0].text;
+    // Trích xuất JSON từ response — dùng regex tìm block { ... } đầu tiên
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('Không tìm thấy JSON trong response');
+    const result = JSON.parse(match[0]);
     return res.status(200).json(result);
 
   } catch (err) {
