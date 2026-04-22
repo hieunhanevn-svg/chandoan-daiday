@@ -4,62 +4,69 @@ import path from 'path';
 const SYSTEM_PROMPT = `Bạn là chuyên gia phân tích lỗi đấu dây điện kế 3 pha gián tiếp.
 
 BẠN NHẬN ĐƯỢC:
-- Số liệu đầu vào và kết quả thuật toán Naive Bayes (ưu tiên hàng đầu)
-- Hình 1: Giản đồ vector thực tế của điện kế đang kiểm tra
-- Hình 2: Bảng 6 trường hợp lỗi mẫu để so sánh trực quan
+- Số liệu đầu vào + kết quả thuật toán Naive Bayes (ưu tiên số 1)
+- Hình 1: Giản đồ vector THỰC TẾ của điện kế đang kiểm tra
+- Hình 2: Bảng 6 trường hợp lỗi MẪU để so sánh trực quan
 
 THỨ TỰ XỬ LÝ BẮT BUỘC:
-Bước 1 — Đọc kỹ kết quả thuật toán (Top 3, P_ratio, numFlipped, ratioX)
-Bước 2 — Nhìn Hình 1 (giản đồ thực tế), so sánh với Hình 2 (6 mẫu)
-Bước 3 — Kết hợp cả hai → đưa ra 2 kết luận
+① Đọc kết quả thuật toán → xác định Top 3 và các chỉ số (P_ratio, numFlipped, ratioX)
+② Nhìn Hình 1 → so sánh với các mẫu trong Hình 2 → xác định hình dáng giống nhất
+③ Kết hợp ① và ② → đưa ra 2 kết luận độc lập
 
 KIẾN THỨC ĐỌC GIẢN ĐỒ:
 Màu: Đỏ=Pha A, Vàng=Pha B, Xanh=Pha C
-Nét LIỀN dày = U (điện áp)
-Nét ĐỨT mảnh = I (dòng điện)
+Nét LIỀN dày = U (điện áp): Ua lên (~90°), Ub phải dưới (~-30°), Uc trái dưới (~-150°)
+Nét ĐỨT mảnh = I (dòng điện): bình thường trễ sau U cùng màu một góc nhỏ
 
-Cách xác định pha bị lỗi từ giản đồ:
-- CT đảo (TH2/3/4): nét đứt của pha đó nằm PHÍA ĐỐI DIỆN nét liền cùng màu
-  → Ia đỏ đứt ngược Ua đỏ liền = Pha A bị đảo CT
-  → Ib vàng đứt ngược Ub vàng liền = Pha B bị đảo CT
-  → Ic xanh đứt ngược Uc xanh liền = Pha C bị đảo CT
-- Mất tín hiệu (TH1): không có nét đứt của pha đó
-- Hoán vị (TH5): nét đứt 1 pha nằm ở vị trí pha khác (lệch ~120°)
-- TH6: đủ 3 nét đứt nhưng 2 cái sai chiều so với U cùng màu
+DẤU HIỆU NHẬN DẠNG TỪNG TRƯỜNG HỢP:
+- Bình thường: 3 nét đứt đều trễ nhẹ sau U cùng màu. Giản đồ đối xứng đẹp.
+- TH1 (Mất 1 pha): Thiếu hẳn 1 nét đứt. Pha đó I=0.
+- TH2 (Đảo 1 CT): Đúng 1 nét đứt nằm PHÍA ĐỐI DIỆN U cùng màu (qua tâm).
+- TH3 (Đảo 2 CT): Đúng 2 nét đứt nằm phía đối diện U tương ứng.
+- TH4 (Đảo 3 CT): Cả 3 nét đứt đều phía đối diện U. P âm hoàn toàn.
+- TH5 (Hoán vị): Nét đứt nằm ở vị trí pha KHÁC (lệch ~120°). P≈0.
+- TH6: Đủ 3 nét đứt NHƯNG 2 cái sai chiều + 2 VT đổi pha. P≈2/3.
 
-Dùng ratioX để xác định pha lỗi (nếu có):
-- ratioX ≈ -1.0 → pha X bị đảo CT (chắc chắn nhất)
-- ratioX ≈ 0 → pha X mất tín hiệu
-- ratioX ≈ +1.0 → pha X bình thường
+XÁC ĐỊNH PHA BỊ LỖI:
+Từ ratioX (nếu có Pa/Pb/Pc) — chính xác nhất:
+  ratioA≈-1 → CT pha A đảo | ratioB≈-1 → CT pha B đảo | ratioC≈-1 → CT pha C đảo
+  ratioX≈0 → pha X mất tín hiệu
 
-QUY TẮC KẾT LUẬN:
-- KẾT LUẬN 1: Chỉ được chọn trong Top 3 thuật toán đã cho
-  CÓ THỂ khác Hạng 1 nếu hình ảnh cho thấy Hạng 2/3 phù hợp hơn
-- KẾT LUẬN 2: Xác định pha cụ thể dựa trên:
-  Ưu tiên 1: ratioX (nếu có Pa/Pb/Pc) — chính xác nhất
-  Ưu tiên 2: phi > 90° — CT đảo
-  Ưu tiên 3: Nhìn giản đồ — nét đứt nào nằm ngược
+Từ phi (nếu không có Pa/Pb/Pc):
+  |phiA|>90° → pha A nghi ngờ đảo CT | |phiB|>90° → pha B | |phiC|>90° → pha C
 
-FORMAT TRẢ LỜI BẮT BUỘC — đúng 4 phần này:
+Từ giản đồ (hỗ trợ thêm):
+  Ia đỏ đứt ngược Ua đỏ liền → Pha A bị đảo CT
+  Ib vàng đứt ngược Ub vàng liền → Pha B bị đảo CT
+  Ic xanh đứt ngược Uc xanh liền → Pha C bị đảo CT
+  Nét đứt lệch 120° bất thường → TH5 hoán vị
 
-━━━━━━━━━━━━━━━━━━━━━
-🔍 SO SÁNH GIẢN ĐỒ
-[1-2 câu: Hình 1 trông giống mẫu nào nhất trong Hình 2? Điểm giống cụ thể.]
+QUY TẮC KẾT LUẬN 1:
+- Chỉ được chọn trong Top 3 thuật toán
+- Có thể khác Hạng 1 nếu hình ảnh cho thấy Hạng 2/3 phù hợp hơn về mặt trực quan
+- Phải nêu lý do kết hợp cả số liệu lẫn hình ảnh
 
-━━━━━━━━━━━━━━━━━━━━━
-🤖 KẾT LUẬN 1 — Theo AI, trường hợp có thể xảy ra:
-[Nêu TH trong Top 3, lý do ngắn gọn kết hợp thuật toán + hình ảnh]
+QUY TẮC KẾT LUẬN 2:
+- Phân tích theo TH mà AI kết luận ở KL1
+- Nêu CỤ THỂ: "Pha A" / "Pha B" / "Pha C" / "Pha A và B" / ...
+- Kèm loại lỗi: "đảo cực tính CT" / "mất tín hiệu" / "đổi chéo dòng áp" / "đảo 2 VT + 2 CT"
+- Bằng chứng: dùng ratioX (nếu có) → phi → giản đồ (theo thứ tự ưu tiên)
 
-━━━━━━━━━━━━━━━━━━━━━
-🔌 KẾT LUẬN 2 — Theo kết quả Hạng 1 thuật toán, pha bị lỗi:
-[Nêu cụ thể: "Pha A" / "Pha B" / "Pha C" / "Pha B và C" / "Cả 3 pha"
- Kèm bằng chứng: ratioX hoặc phi hoặc vị trí nét đứt trên giản đồ]
+FORMAT TRẢ LỜI — đúng 4 phần, không thêm không bớt:
 
-━━━━━━━━━━━━━━━━━━━━━
-⚠️ LƯU Ý (nếu có):
-[Nếu thấy mâu thuẫn hoặc cần KTV kiểm tra thêm. Bỏ qua nếu không có.]
+🔍 SO SÁNH GIẢN ĐỒ:
+[Hình 1 giống mẫu nào nhất trong Hình 2? Nêu điểm giống cụ thể trên hình.]
 
-Tổng cộng tối đa 150 chữ. Tiếng Việt. Rõ ràng, thực tế.`;
+🤖 KẾT LUẬN 1 — Theo AI:
+[TH nào trong Top 3, lý do kết hợp số liệu + hình ảnh]
+
+🔌 KẾT LUẬN 2 — Pha bị lỗi:
+[Tên pha cụ thể + loại lỗi + bằng chứng số hoặc hình ảnh]
+
+⚠️ LƯU Ý:
+[Mâu thuẫn hoặc cần kiểm tra thêm. Ghi "Không có mâu thuẫn" nếu nhất quán.]
+
+Tối đa 160 chữ. Tiếng Việt. Rõ ràng, thực tế.`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -70,74 +77,71 @@ export default async function handler(req, res) {
   const { imageBase64, diagnosisTop3, metrics, rawData } = req.body;
   if (!imageBase64) return res.status(400).json({ error: 'Thiếu ảnh giản đồ' });
 
-  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+  const b64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
   const top3 = diagnosisTop3 || [];
   const m = metrics || {};
   const d = rawData || {};
 
-  // Đọc ảnh tham chiếu 6 TH
-  let refBase64 = '';
+  // Đọc ảnh tham chiếu
+  let refB64 = '';
   try {
-    const refPath = path.join(process.cwd(), 'public', 'reference_6cases.png');
-    refBase64 = fs.readFileSync(refPath).toString('base64');
-  } catch (e) {
-    console.log('Không đọc được ảnh tham chiếu');
-  }
+    const p = path.join(process.cwd(), 'public', 'reference_6cases.png');
+    refB64 = fs.readFileSync(p).toString('base64');
+  } catch(e) { console.log('No ref image'); }
 
-  // Phân tích pha bị lỗi từ số liệu để hỗ trợ AI
-  const flipInfo = [];
+  // Phân tích pha nghi ngờ từ số liệu
+  const phiA = parseFloat(d.phiA)||0, phiB = parseFloat(d.phiB)||0, phiC = parseFloat(d.phiC)||0;
+  const rA = m.ratioA ? parseFloat(m.ratioA) : null;
+  const rB = m.ratioB ? parseFloat(m.ratioB) : null;
+  const rC = m.ratioC ? parseFloat(m.ratioC) : null;
+
+  const suspectPha = [];
   if (m.hasPabc) {
-    if (m.ratioA && parseFloat(m.ratioA) < -0.5) flipInfo.push(`Pha A (ratioA=${m.ratioA}≈-1)`);
-    if (m.ratioB && parseFloat(m.ratioB) < -0.5) flipInfo.push(`Pha B (ratioB=${m.ratioB}≈-1)`);
-    if (m.ratioC && parseFloat(m.ratioC) < -0.5) flipInfo.push(`Pha C (ratioC=${m.ratioC}≈-1)`);
+    if (rA !== null && rA < -0.5) suspectPha.push(`Pha A (ratioA=${m.ratioA} → CT đảo)`);
+    if (rB !== null && rB < -0.5) suspectPha.push(`Pha B (ratioB=${m.ratioB} → CT đảo)`);
+    if (rC !== null && rC < -0.5) suspectPha.push(`Pha C (ratioC=${m.ratioC} → CT đảo)`);
+    if (rA !== null && Math.abs(rA) < 0.25) suspectPha.push(`Pha A (ratioA≈0 → mất tín hiệu)`);
+    if (rB !== null && Math.abs(rB) < 0.25) suspectPha.push(`Pha B (ratioB≈0 → mất tín hiệu)`);
+    if (rC !== null && Math.abs(rC) < 0.25) suspectPha.push(`Pha C (ratioC≈0 → mất tín hiệu)`);
   } else {
-    if (Math.abs(parseFloat(d.phiA)||0) > 90) flipInfo.push(`Pha A (|phiA|=${Math.abs(parseFloat(d.phiA))}°>90°)`);
-    if (Math.abs(parseFloat(d.phiB)||0) > 90) flipInfo.push(`Pha B (|phiB|=${Math.abs(parseFloat(d.phiB))}°>90°)`);
-    if (Math.abs(parseFloat(d.phiC)||0) > 90) flipInfo.push(`Pha C (|phiC|=${Math.abs(parseFloat(d.phiC))}°>90°)`);
+    if (Math.abs(phiA) > 90) suspectPha.push(`Pha A (phiA=${d.phiA}° > 90°)`);
+    if (Math.abs(phiB) > 90) suspectPha.push(`Pha B (phiB=${d.phiB}° > 90°)`);
+    if (Math.abs(phiC) > 90) suspectPha.push(`Pha C (phiC=${d.phiC}° > 90°)`);
   }
 
   const userMsg = `
-=== BƯỚC 1: KẾT QUẢ THUẬT TOÁN (ưu tiên hàng đầu) ===
+=== BƯỚC 1: KẾT QUẢ THUẬT TOÁN (ưu tiên số 1) ===
 
-TOP 3 TRƯỜNG HỢP (chỉ được kết luận trong phạm vi này):
+TOP 3 TRƯỜNG HỢP (chỉ kết luận trong phạm vi này):
   Hạng 1: ${top3[0]?.name || '—'}
   Hạng 2: ${top3[1]?.name || '—'}
   Hạng 3: ${top3[2]?.name || '—'}
 
-CÁC CHỈ SỐ TÍNH TOÁN:
+CHỈ SỐ TÍNH TOÁN:
   P_ratio = ${m.P_ratio}
-  (≈+1.0: đúng | ≈+0.67: TH1 hoặc TH6 | ≈+0.33: TH2 | ≈0: TH5 | ≈-0.33: TH3 | ≈-1.0: TH4)
-  
-  Số pha bị đảo (numFlipped) = ${m.numFlipped}
+  numFlipped (số pha đảo) = ${m.numFlipped}
   has120offset = ${m.has120} (True = lệch 120° → đặc trưng TH5)
-  
-${m.hasPabc ? `  ratioX từng pha (đây là bằng chứng mạnh nhất):
-  ratioA = ${m.ratioA} | ratioB = ${m.ratioB} | ratioC = ${m.ratioC}
-  (≈+1: đúng chiều | ≈-1: CT đảo ngược | ≈0: mất tín hiệu)` 
-: `  Không có Pa/Pb/Pc → dùng phi để xác định:
-  phiA=${d.phiA}° | phiB=${d.phiB}° | phiC=${d.phiC}°
-  (|phi|>90° → CT có thể đảo)`}
+${m.hasPabc
+  ? `  ratioA=${m.ratioA} | ratioB=${m.ratioB} | ratioC=${m.ratioC}
+  (≈+1: đúng | ≈-1: CT đảo | ≈0: mất tín hiệu)`
+  : `  phiA=${d.phiA}° | phiB=${d.phiB}° | phiC=${d.phiC}°`}
 
-${flipInfo.length > 0 
-  ? `  → Pha nghi ngờ bị lỗi theo số liệu: ${flipInfo.join(', ')}`
-  : '  → Không xác định được pha lỗi cụ thể từ số liệu'}
+PHA NGHI NGỜ BỊ LỖI (từ số liệu):
+  ${suspectPha.length > 0 ? suspectPha.join('\n  ') : 'Chưa xác định được cụ thể'}
 
 === BƯỚC 2: NHÌN GIẢN ĐỒ ===
 Hình 1 = giản đồ thực tế. Hình 2 = bảng 6 TH mẫu.
-So sánh hình dáng, xác định mẫu nào giống nhất.
+So sánh hình dáng để xác nhận hoặc điều chỉnh kết quả thuật toán.
+Đưa ra 2 kết luận theo format quy định.`;
 
-Hãy đưa ra 2 kết luận theo format đã quy định.`;
-
-  // Gửi 2 ảnh cho Claude
-  const content = [];
-  content.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: base64Data } });
-  if (refBase64) {
-    content.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: refBase64 } });
-  }
-  content.push({ type: 'text', text: userMsg });
+  const content = [
+    { type:'image', source:{ type:'base64', media_type:'image/png', data: b64 } },
+    ...(refB64 ? [{ type:'image', source:{ type:'base64', media_type:'image/png', data: refB64 } }] : []),
+    { type:'text', text: userMsg }
+  ];
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -152,18 +156,14 @@ Hãy đưa ra 2 kết luận theo format đã quy định.`;
       }),
     });
 
-    if (!response.ok) {
-      const err = await response.json();
-      return res.status(response.status).json({ error: err.error?.message || 'Lỗi Claude API' });
+    if (!resp.ok) {
+      const err = await resp.json();
+      return res.status(resp.status).json({ error: err.error?.message || 'Lỗi API' });
     }
+    const data = await resp.json();
+    return res.status(200).json({ analysis: data.content[0].text.trim(), usedRef: !!refB64 });
 
-    const data = await response.json();
-    return res.status(200).json({
-      analysis: data.content[0].text.trim(),
-      usedReference: !!refBase64,
-    });
-
-  } catch (err) {
-    return res.status(500).json({ error: 'Lỗi phân tích: ' + err.message });
+  } catch(err) {
+    return res.status(500).json({ error: 'Lỗi: ' + err.message });
   }
 }
