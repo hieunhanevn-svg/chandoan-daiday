@@ -267,6 +267,10 @@ export default function Home() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [step, setStep] = useState('form');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState('');
+  const [aiError, setAiError] = useState('');
+  const canvasRef2 = useRef(null);
 
   const set = k => v => setForm(f => ({ ...f, [k]: v }));
 
@@ -293,7 +297,41 @@ export default function Home() {
     }
   }
 
-  function reset() { setStep('form'); setResult(null); setError(''); }
+  function reset() { setStep('form'); setResult(null); setError(''); setAiResult(''); setAiError(''); }
+
+  async function runAiAnalysis() {
+    const canvas = document.querySelector('canvas');
+    if (!canvas) { setAiError('Không tìm thấy giản đồ vector.'); return; }
+    // Chụp ảnh canvas ở độ phân giải cao hơn để AI nhìn rõ hơn
+    const imageBase64 = canvas.toDataURL('image/png');
+    setAiLoading(true); setAiResult(''); setAiError('');
+    try {
+      const res = await fetch('/api/ai-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64,
+          diagnosisTop3: result?.results || [],
+          metrics: result?.metrics || {},
+          // Gửi toàn bộ số liệu gốc để AI hiểu đúng bối cảnh
+          rawData: {
+            Ua: form.Ua, Ub: form.Ub, Uc: form.Uc,
+            Ia: form.Ia, Ib: form.Ib, Ic: form.Ic,
+            phiA: form.phiA, phiB: form.phiB, phiC: form.phiC,
+            phiMode: form.phiMode, Ptotal: form.Ptotal,
+            Pa_do: form.Pa_do, Pb_do: form.Pb_do, Pc_do: form.Pc_do,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi phân tích AI');
+      setAiResult(data.analysis);
+    } catch (e) {
+      setAiError(e.message);
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   const m = result?.metrics || {};
 
@@ -472,6 +510,79 @@ export default function Home() {
                 </div>
               );
             })}
+
+
+            {/* ── AI VISION ANALYSIS ── */}
+            <div style={{
+              background:'white', borderRadius:16, border:'1px solid #E8E8E8',
+              padding:14, marginBottom:12, boxShadow:'0 1px 4px rgba(0,0,0,0.06)',
+            }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+                <span style={{ fontSize:13, fontWeight:600, color:'#444' }}>Phân tích AI — nhìn giản đồ</span>
+                <span style={{ fontSize:10, padding:'2px 8px', borderRadius:20, background:'#F3E8FF', color:'#4B0082', fontWeight:600 }}>
+                  Beta
+                </span>
+              </div>
+              <p style={{ fontSize:12, color:'#666', marginBottom:10, lineHeight:1.5 }}>
+                AI nhìn trực tiếp vào giản đồ vector, so sánh hình dáng với 6 trường hợp lỗi và đưa ra nhận xét độc lập — bổ sung thêm cơ sở cho kết luận.
+              </p>
+
+              {!aiResult && !aiLoading && !aiError && (
+                <button onClick={runAiAnalysis} style={{
+                  width:'100%', padding:12,
+                  background:'linear-gradient(135deg,#4B0082,#7B2FBE)',
+                  color:'white', border:'none', borderRadius:10,
+                  fontSize:14, fontWeight:600, cursor:'pointer',
+                  display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                }}>
+                  🤖 Phân tích giản đồ bằng AI
+                </button>
+              )}
+
+              {aiLoading && (
+                <div style={{ textAlign:'center', padding:'16px 0', color:'#666' }}>
+                  <span style={{ display:'inline-block', animation:'spin .8s linear infinite', fontSize:20 }}>⚙️</span>
+                  <div style={{ fontSize:12, marginTop:6 }}>AI đang phân tích giản đồ vector...</div>
+                </div>
+              )}
+
+              {aiError && (
+                <div style={{ background:'#FFEBEE', borderRadius:10, padding:'10px 12px', fontSize:12, color:'#C62828' }}>
+                  ❌ {aiError}
+                  <button onClick={runAiAnalysis} style={{
+                    display:'block', marginTop:8, padding:'6px 12px',
+                    background:'#7B2FBE', color:'white', border:'none',
+                    borderRadius:6, fontSize:12, cursor:'pointer',
+                  }}>Thử lại</button>
+                </div>
+              )}
+
+              {aiResult && (
+                <div>
+                  <div style={{
+                    background:'linear-gradient(135deg,#F3E8FF,#EDE0FF)',
+                    border:'1.5px solid #C084FC',
+                    borderRadius:12, padding:'12px 14px',
+                  }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+                      <span style={{ fontSize:16 }}>🤖</span>
+                      <span style={{ fontSize:12, fontWeight:600, color:'#4B0082' }}>Nhận xét của AI</span>
+                    </div>
+                    <div style={{ fontSize:13, color:'#2D1B69', lineHeight:1.7, whiteSpace:'pre-line' }}>
+                      {aiResult}
+                    </div>
+                  </div>
+                  <button onClick={runAiAnalysis} style={{
+                    width:'100%', padding:'8px 0', marginTop:8,
+                    background:'transparent', color:'#7B2FBE',
+                    border:'1px solid #C084FC', borderRadius:8,
+                    fontSize:12, cursor:'pointer',
+                  }}>
+                    🔄 Phân tích lại
+                  </button>
+                </div>
+              )}
+            </div>
 
             <button onClick={reset} style={{
               width:'100%', padding:14, marginTop:4,
