@@ -3,13 +3,11 @@ import { useEffect } from 'react';
 import '../styles/globals.css';
 
 export default function App({ Component, pageProps }) {
-  // Đăng ký Service Worker — bật chế độ offline
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/sw.js')
-        .then(() => console.log('Service Worker đã đăng ký — App hoạt động offline'))
-        .catch(err => console.log('Service Worker lỗi:', err));
+        .catch(err => console.log('SW error:', err));
     }
   }, []);
 
