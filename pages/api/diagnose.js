@@ -124,6 +124,27 @@ function diagnose(body) {
   function s1(has, exp) { return has === exp ? 1.0 : 0.02; }
   function sp(nn, exp) { return hasPabc ? (nn === exp ? 1.0 : 0.02) : 1.0; }
 
+  // ── P_abs: ratio_abs = (|Pa_do|+|Pb_do|+|Pc_do|) / Pcalc ──────
+  // Chỉ có ý nghĩa khi hasPabc = true
+  // ratio_abs < 1.0 → có pha đóng góp ≈ 0 → dấu hiệu mất tín hiệu (TH1)
+  // ratio_abs ≈ 1.0 → tất cả pha đóng góp đủ |P| (Bình thường / TH6)
+  function sabs_low(ra) {
+    // Dùng cho TH1: kỳ vọng ratio_abs < 1.0 (pha mất không đóng góp)
+    if (!hasPabc || ra === null) return 1.0;
+    const dist = 1.0 - ra;                    // khoảng cách khỏi 1.0
+    if (dist >= 0.20) return 1.0;             // ratio_abs ≤ 0.80 → ủng hộ TH1 mạnh
+    if (dist >= 0.08) return 0.5;             // ratio_abs 0.80–0.92 → ủng hộ nhẹ
+    return 0.02;                              // ratio_abs ≈ 1.0 → phủ định TH1
+  }
+  function sabs_high(ra) {
+    // Dùng cho TH6 và Bình thường: kỳ vọng ratio_abs ≈ 1.0
+    if (!hasPabc || ra === null) return 1.0;
+    const dist = 1.0 - ra;
+    if (dist <= 0.08) return 1.0;             // ratio_abs ≥ 0.92 → ủng hộ
+    if (dist <= 0.20) return 0.5;             // ratio_abs 0.80–0.92 → ủng hộ nhẹ
+    return 0.02;                              // ratio_abs < 0.80 → phủ định
+  }
+
   // Khi tải lệch mạnh & không có Pa/Pb/Pc → giảm trọng số sr()
   function srAdapted(r, exp) {
     if (isHighlyUnbalanced) {
@@ -141,14 +162,14 @@ function diagnose(body) {
       name: 'Đấu dây đúng cực tính',
       desc: 'P đo = P tính toán. Hệ thống vận hành đúng.',
       action: 'Không cần xử lý. Hệ thống hoạt động bình thường.',
-      score: srAdapted(ratio,1.0) * sf(numFlipped,0) * sm(numMissing,0) * s1(has120,false) * sp(numNeg,0),
+      score: srAdapted(ratio,1.0) * sf(numFlipped,0) * sm(numMissing,0) * s1(has120,false) * sp(numNeg,0) * sabs_high(ratioAbs),
     },
     {
       key: 'TH1',
       name: 'TH1: Mất điện áp hoặc dòng 1 pha',
       desc: 'P = 2/3 × P₃pha. 1 pha mất tín hiệu CT hoặc VT.',
       action: 'Kiểm tra cầu chì nhi thứ, đứt dây CT/VT pha có I=0 hoặc U=0.',
-      score: srAdapted(ratio,0.667) * sf(numFlipped,0) * sm(numMissing,1) * s1(has120,false) * sp(numNeg,0),
+      score: srAdapted(ratio,0.667) * sf(numFlipped,0) * sm(numMissing,1) * s1(has120,false) * sp(numNeg,0) * sabs_low(ratioAbs),
     },
     {
       key: 'TH2',
@@ -184,7 +205,7 @@ function diagnose(body) {
       name: 'TH6: Đảo 2 cuộn áp VT + 2 dòng CT',
       desc: 'P = 2/3 × P₃pha. 2 VT đổi pha + 2 CT bị đảo.',
       action: 'Đặt lại 2 cuộn áp VT đúng pha + đổi S1↔S2 của 2 CT tương ứng.',
-      score: srAdapted(ratio,0.667) * (numFlipped>=1?1.0:0.1) * sm(numMissing,0) * s1(has120,false) * sp(numNeg,2),
+      score: srAdapted(ratio,0.667) * (numFlipped>=1?1.0:0.1) * sm(numMissing,0) * s1(has120,false) * sp(numNeg,2) * sabs_high(ratioAbs),
     },
   ];
 
