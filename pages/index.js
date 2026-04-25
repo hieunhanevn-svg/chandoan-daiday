@@ -363,7 +363,8 @@ export default function Home() {
               <span style={{ fontSize:22 }}>⚡</span>
               <h1 style={{ fontSize:17, fontWeight:700, margin:0 }}>Chẩn đoán lỗi đấu dây điện kế</h1>
             </div>
-            <p style={{ fontSize:12, opacity:0.8, margin:0 }}>Điện kế 3 pha gián tiếp · Thuật toán Naive Bayes v6.5</p>
+            <p style={{ fontSize:12, opacity:0.8, margin:'0 0 2px' }}>Điện kế 3 pha gián tiếp · Thuật toán Naive Bayes v6.5</p>
+            <p style={{ fontSize:10, opacity:0.45, margin:0, letterSpacing:'0.02em' }}>Mọi góp ý xin liên hệ: NHANNPH-0966711766</p>
           </div>
         </div>
 
