@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
+import { buildKnowledge } from './knowledge-base.js';
 
 const REF_MAP = {
   'TH1':'ref_TH1.png','TH2':'ref_TH2.png','TH3':'ref_TH3.png',
@@ -211,6 +212,10 @@ export default async function handler(req, res) {
   // Xác định pha nghi ngờ từ số liệu
   const suspectedPhases = getSuspectedPhases(m, d);
 
+  // Chọn kiến thức phù hợp với top3 (Phương án 2: tiết kiệm token)
+  const top3Names = top3.map(t => t?.name || '');
+  const selectedKnowledge = buildKnowledge(top3Names);
+
   // Load ảnh tham chiếu — CẮT ĐÚNG Ô tương ứng với pha nghi ngờ
   const refImages = (await Promise.all(top3.map(async (th, i) => {
     const key = getRefKey(th?.name || '');
@@ -314,6 +319,9 @@ HÌNH ẢNH:
   Hình 1 = Giản đồ vector thực tế (phân tích chính)
 ${refImages.map(r=>`  Hình ${r.index+1} = Mẫu tham chiếu: ${r.name}${r.suspectedPhases?.length ? ` — đã cắt đúng ô pha ${r.suspectedPhases.join('+')} nghi ngờ` : ''}`).join('\n')}
   (Mỗi hình mẫu đã được cắt đúng biến thể pha nghi ngờ — so sánh trực tiếp với Hình 1)
+
+KIẾN THỨC CHUYÊN SÂU ĐỂ PHÂN TÍCH CHÍNH XÁC:
+${selectedKnowledge}
 
 YÊU CẦU BẮT BUỘC:
 1. Phân tích ĐỦ CẢ 3 HẠNG — viết đủ ▶ Hạng 1, ▶ Hạng 2, ▶ Hạng 3
