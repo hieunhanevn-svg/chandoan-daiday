@@ -94,6 +94,16 @@ function diagnose(body) {
   // Số pha ratio âm
   const numNeg = [rA, rB, rC].filter(r => r !== null && r < -0.5).length;
 
+  // ratio_abs = (|Pa_do|+|Pb_do|+|Pc_do|) / Pcalc — căn cứ thứ 5
+  // Chỉ tính khi có Pa/Pb/Pc. ratio_abs < 1.0 → có pha mất tín hiệu (TH1)
+  let ratioAbs = null;
+  if (hasPabc && Pcalc > 0.001) {
+    const absPa = hasPa ? Math.abs(pa_do) : Math.abs(Pa);
+    const absPb = hasPb ? Math.abs(pb_do) : Math.abs(Pb);
+    const absPc = hasPc ? Math.abs(pc_do) : Math.abs(Pc);
+    ratioAbs = (absPa + absPb + absPc) / Pcalc;
+  }
+
   // ── NAIVE BAYES SCORING ─────────────────────────────────────────
   function sr(r, exp, t1=0.20, t2=0.40) {
     const d = Math.abs(r - exp);
