@@ -250,13 +250,13 @@ function diagnose(body) {
       desc: c.desc,
       action: c.action,
       // Breakdown điểm từng thành phần — để AI giải thích tại sao
-      scoreBreakdown: buildBreakdown(c.key, ratio, numFlipped, numMissing, has120, numNeg, hasPabc, isHighlyUnbalanced),
+      scoreBreakdown: buildBreakdown(c.key, ratio, numFlipped, numMissing, has120, numNeg, hasPabc, isHighlyUnbalanced, ratioAbs),
     })),
   };
 }
 
 // Xây dựng giải thích điểm từng TH — dùng ngôn ngữ thực tế, không ký hiệu kỹ thuật
-function buildBreakdown(key, ratio, numFlipped, numMissing, has120, numNeg, hasPabc, isHighlyUnbalanced) {
+function buildBreakdown(key, ratio, numFlipped, numMissing, has120, numNeg, hasPabc, isHighlyUnbalanced, ratioAbs) {
   const lines = [];
   const pct = Math.abs(ratio * 100).toFixed(0);
 
