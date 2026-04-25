@@ -292,6 +292,24 @@ function buildBreakdown(key, ratio, numFlipped, numMissing, has120, numNeg, hasP
     }
   }
 
+  // ── Giải thích ratio_abs — căn cứ thứ 5: P_trị_tuyệt_đối / Pcalc ──
+  if (ratioAbs !== null && (key === 'TH1' || key === 'TH6')) {
+    const pct = (ratioAbs * 100).toFixed(0);
+    if (key === 'TH1') {
+      if (ratioAbs < 0.90) {
+        lines.push(`Tổng trị tuyệt đối công suất đo từng pha = ${pct}% so với tính toán — thấp hơn 100% vì có pha đóng góp gần bằng 0 → KHỚP với mất tín hiệu 1 pha`);
+      } else {
+        lines.push(`Tổng trị tuyệt đối công suất đo từng pha = ${pct}% so với tính toán — gần 100%, cả 3 pha đều đóng góp công suất → KHÔNG KHỚP với mất tín hiệu (điểm trừ cho TH1)`);
+      }
+    } else {
+      if (ratioAbs > 0.90) {
+        lines.push(`Tổng trị tuyệt đối công suất đo từng pha = ${pct}% so với tính toán — gần 100%, xác nhận cả 3 pha đều đóng góp công suất dù 2 pha bị đảo chiều → KHỚP với TH6`);
+      } else {
+        lines.push(`Tổng trị tuyệt đối công suất đo từng pha = ${pct}% so với tính toán — thấp hơn 100%, gợi ý có pha yếu → KHÔNG KHỚP với TH6 (điểm trừ)`);
+      }
+    }
+  }
+
   // Tải lệch
   if (isHighlyUnbalanced) {
     lines.push(`Lưu ý: Dòng điện các pha chênh lệch nhau nhiều nên tỷ lệ công suất kém tin cậy khi không có số liệu từng pha`);
